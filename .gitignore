@@ -1,1 +1,11 @@
 .claude
+/.tmp/
+/sift
+/sift-frontend/
+/frontend/dist/
+/frontend/.output/
+/frontend/.git/
+/histogram*.png
+/sift-*.png
+/sift-ui*.png
+/ui-check.png

@@ -1,0 +1,52 @@
+{
+  "tasks": [
+    {
+      "title": "Bootstrap Go CLI and render first JSONL file",
+      "completed": true,
+      "parallel_group": 1,
+      "description": "Implement `sift -f <path>` to ingest a local JSONL file, infer core fields (timestamp/level/message), and render readable rows in the local web UI."
+    },
+    {
+      "title": "Event detail drawer and copy JSON",
+      "completed": true,
+      "parallel_group": 2,
+      "description": "Add per-row drill-down with full structured payload and copy-to-clipboard for raw JSON."
+    },
+    {
+      "title": "Full-text search across log events",
+      "completed": true,
+      "parallel_group": 2,
+      "description": "Add deterministic full-text search via query bar with keyboard-first interaction."
+    },
+    {
+      "title": "Live stream ingestion with pause/resume",
+      "completed": true,
+      "parallel_group": 2,
+      "description": "Support streaming ingestion via CLI input (stdin/tail) with ordered append and pause/resume behavior."
+    },
+    {
+      "title": "Field filters and search-filter composition",
+      "completed": true,
+      "parallel_group": 3,
+      "description": "Implement field operators (equals, not-equals, contains, exists, range) and combine with search using deterministic AND semantics."
+    },
+    {
+      "title": "Parse error visibility and ingest status rail",
+      "completed": true,
+      "parallel_group": 3,
+      "description": "Surface malformed JSON lines and ingest health metrics such as events/sec, parse errors, and dropped events."
+    },
+    {
+      "title": "Saved queries and persisted session state",
+      "completed": true,
+      "parallel_group": 4,
+      "description": "Persist bookmarks and last session query/filter state for restore on startup."
+    },
+    {
+      "title": "Large-log performance and memory retention caps",
+      "completed": true,
+      "parallel_group": 4,
+      "description": "Add virtualized rendering and bounded retention/eviction to keep UI responsive with 100k+ events."
+    }
+  ]
+}
