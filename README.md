@@ -1,42 +1,23 @@
-# Sift
+# Sift Monorepo
 
-Local log viewer for JSON/JSONL files with a browser UI.
+This repository now contains multiple related projects:
 
-## Usage
+- `sift/`: local JSON/JSONL log viewer (Go backend + embedded TanStack frontend)
+- `sift-spec/`: versioned event schema and examples for `SiftEvent`
+- `sift-sdk-python/`: early Python SDK implementing the "wide event" / request-scoped logging model
 
-Run against a file (JSONL, JSON array, or single JSON object):
+## Goal
 
-```bash
-sift -f ./logs.jsonl
-```
+Keep Sift as a strong local viewer for arbitrary JSON logs, while adding a reusable event spec and SDKs (Python first) inspired by the `evlog` approach:
 
-Tail a file for appended lines:
+- one structured event per request/task
+- accumulated context
+- transport/drain abstraction
+- machine-friendly JSON
 
-```bash
-sift -f ./logs.jsonl -tail
-```
+## Current Status
 
-Stream from stdin (live mode):
+- Viewer is implemented in `sift/`
+- `SiftEvent v1` schema draft is in `sift-spec/`
+- Python SDK scaffold is in `sift-sdk-python/`
 
-```bash
-tail -f ./logs.jsonl | sift
-```
-
-Or explicitly read stdin:
-
-```bash
-tail -f ./logs.jsonl | sift -f -
-```
-
-Set retained event cap (server + UI memory cap):
-
-```bash
-sift -f ./logs.jsonl -cap 50000
-```
-
-## Notes
-
-- Sift starts a local HTTP server on `127.0.0.1` and prints the URL to open.
-- `-tail` follows appended lines in the target file (polling-based).
-- Search and field filters are ANDed in the UI.
-- Bookmarks, search/filter state, and column visibility are saved in `localStorage`.

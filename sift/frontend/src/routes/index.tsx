@@ -39,6 +39,20 @@ type LogRow = {
   _parsedPayload?: unknown
 }
 
+type VisibleCols = {
+  timestamp: boolean
+  level: boolean
+  service: boolean
+  path: boolean
+  outcome: boolean
+  status: boolean
+  duration: boolean
+  source: boolean
+  context: boolean
+  message: boolean
+  payload: boolean
+}
+
 type MalformedLine = { line: number; raw: string; error: string }
 
 type IngestMetrics = {
@@ -104,9 +118,14 @@ function SiftPage() {
   const [bookmarks, setBookmarks] = useState<Array<{ search: string; filters: string }>>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [visibleCols, setVisibleCols] = useState<Record<string, boolean>>({
+  const [visibleCols, setVisibleCols] = useState<VisibleCols>({
     timestamp: true,
     level: true,
+    service: false,
+    path: false,
+    outcome: false,
+    status: false,
+    duration: false,
     source: true,
     context: true,
     message: true,
@@ -117,6 +136,8 @@ function SiftPage() {
   const filtersRef = useRef<HTMLInputElement | null>(null)
   const malformedRef = useRef<HTMLDetailsElement | null>(null)
   const tablePanelRef = useRef<HTMLElement | null>(null)
+  const restoredVisibleColsRef = useRef(false)
+  const appliedSchemaPresetRef = useRef(false)
   const deferredSearch = useDeferredValue(search)
   const deferredFiltersInput = useDeferredValue(filtersInput)
 
@@ -133,6 +154,7 @@ function SiftPage() {
       if (typeof parsed.search === 'string') setSearch(parsed.search)
       if (typeof parsed.filters === 'string') setFiltersInput(parsed.filters)
       if (parsed.visibleCols && typeof parsed.visibleCols === 'object') {
+        restoredVisibleColsRef.current = true
         setVisibleCols((prev) => ({ ...prev, ...parsed.visibleCols }))
       }
       if (Array.isArray(parsed.bookmarks)) {
@@ -231,6 +253,28 @@ function SiftPage() {
 
   const parsedFilters = useMemo(() => parseQueryClauses(deferredFiltersInput), [deferredFiltersInput])
 
+  const isSiftEventDataset = useMemo(
+    () => rows.some((row, idx) => idx < 200 && isSiftEventRow(row)),
+    [rows],
+  )
+
+  useEffect(() => {
+    if (!isSiftEventDataset) return
+    if (restoredVisibleColsRef.current) return
+    if (appliedSchemaPresetRef.current) return
+    appliedSchemaPresetRef.current = true
+    setVisibleCols((prev) => ({
+      ...prev,
+      service: true,
+      path: true,
+      outcome: true,
+      status: true,
+      duration: true,
+      source: false,
+      context: false,
+    }))
+  }, [isSiftEventDataset])
+
   const filteredRows = useMemo(() => {
     const q = deferredSearch.trim().toLowerCase()
     const terms = q ? tokenizeQuery(q).map((t) => t.toLowerCase()) : []
@@ -302,6 +346,53 @@ function SiftPage() {
         size: 110,
         cell: (ctx) => <LevelBadge level={String(ctx.getValue<string>() || '')} />,
       },
+      {
+        id: 'service',
+        header: 'Service',
+        size: 150,
+        accessorFn: (row) => siftField(row, 'service') ?? '-',
+        cell: (ctx) => String(ctx.getValue<string>() || '-'),
+      },
+      {
+        id: 'path',
+        header: 'Path',
+        size: 220,
+        accessorFn: (row) => siftField(row, 'request.path') ?? siftField(row, 'request.route') ?? '-',
+        cell: (ctx) => <span className="mono dim">{String(ctx.getValue<string>() || '-')}</span>,
+      },
+      {
+        id: 'outcome',
+        header: 'Outcome',
+        size: 110,
+        accessorFn: (row) => siftField(row, 'outcome') ?? '-',
+        cell: (ctx) => {
+          const v = String(ctx.getValue<string>() || '-')
+          return <span className={`outcome-chip ${outcomeClass(v)}`}>{v}</span>
+        },
+      },
+      {
+        id: 'status',
+        header: 'Status',
+        size: 90,
+        accessorFn: (row) => siftField(row, 'status_code') ?? '',
+        cell: (ctx) => {
+          const raw = ctx.getValue<number | string>()
+          const n = Number(raw)
+          if (!Number.isFinite(n)) return <span className="dim">-</span>
+          const cls = n >= 500 ? 'status error' : n >= 400 ? 'status warn' : n >= 300 ? 'status other' : 'status info'
+          return <span className={cls}>{n}</span>
+        },
+      },
+      {
+        id: 'duration',
+        header: 'Duration',
+        size: 100,
+        accessorFn: (row) => siftField(row, 'duration_ms') ?? '',
+        cell: (ctx) => {
+          const n = Number(ctx.getValue<number | string>())
+          return Number.isFinite(n) ? <span className="mono">{formatDurationMs(n)}</span> : <span className="dim">-</span>
+        },
+      },
       { accessorKey: 'source', header: 'Source', size: 140, cell: (ctx) => String(ctx.getValue<string>() || '-') },
       { accessorKey: 'context', header: 'Context', size: 140, cell: (ctx) => String(ctx.getValue<string>() || '-') },
       { accessorKey: 'message', header: 'Message', size: 420, cell: (ctx) => <span className="message-cell">{String(ctx.getValue<string>() || '-')}</span> },
@@ -323,6 +414,11 @@ function SiftPage() {
     () => ({
       timestamp: visibleCols.timestamp,
       level: visibleCols.level,
+      service: visibleCols.service,
+      path: visibleCols.path,
+      outcome: visibleCols.outcome,
+      status: visibleCols.status,
+      duration: visibleCols.duration,
       source: visibleCols.source,
       context: visibleCols.context,
       message: visibleCols.message,
@@ -410,7 +506,7 @@ function SiftPage() {
               ))}
             </div>
             <div className="toggles">
-              {(['timestamp','level','source','context','message','payload'] as const).map((key) => (
+              {(['timestamp','level','service','path','outcome','status','duration','source','context','message','payload'] as const).map((key) => (
                 <label key={key}><input type="checkbox" checked={visibleCols[key]} onChange={(e) => setVisibleCols((p) => ({ ...p, [key]: e.target.checked }))} /> {key}</label>
               ))}
             </div>
@@ -434,6 +530,8 @@ function SiftPage() {
               <div>Filters <strong>{parsedFilters.length}</strong></div>
               <div>Dropped <strong>{metrics?.droppedEvents ?? 0}</strong></div>
               <div>Parse errors <strong>{metrics?.parseErrors ?? malformed.length}</strong></div>
+              {isSiftEventDataset ? <div>Schema <strong>SiftEvent v1</strong></div> : null}
+              {isSiftEventDataset ? <div>Outcome <strong>{formatOutcomeSummary(filteredRows)}</strong></div> : null}
               {boot.live ? (
                 <button className="ui-btn" onClick={() => setLivePaused((v) => !v)}>
                   {livePaused ? 'Resume stream' : 'Pause stream'}
@@ -504,6 +602,11 @@ function SiftPage() {
               <div><span>Line</span><strong>{selected.line}</strong></div>
               <div><span>Timestamp</span><strong>{selected.timestamp || '-'}</strong></div>
               <div><span>Level</span><strong>{selected.level || '-'}</strong></div>
+              <div><span>Service</span><strong>{String(siftField(selected, 'service') ?? '-')}</strong></div>
+              <div><span>Path</span><strong>{String(siftField(selected, 'request.path') ?? siftField(selected, 'request.route') ?? '-')}</strong></div>
+              <div><span>Outcome</span><strong>{String(siftField(selected, 'outcome') ?? '-')}</strong></div>
+              <div><span>Status</span><strong>{String(siftField(selected, 'status_code') ?? '-')}</strong></div>
+              <div><span>Duration</span><strong>{(() => { const n = Number(siftField(selected, 'duration_ms')); return Number.isFinite(n) ? formatDurationMs(n) : '-' })()}</strong></div>
               <div><span>Source</span><strong>{selected.source || '-'}</strong></div>
               <div><span>Context</span><strong>{selected.context || '-'}</strong></div>
             </div>
@@ -1024,6 +1127,49 @@ function normalizeValue(value: unknown) {
   } catch {
     return String(value)
   }
+}
+
+function isSiftEventRow(row: LogRow) {
+  const v = siftField(row, 'schema_version')
+  return String(v || '') === 'sift.event/v1'
+}
+
+function siftField(row: LogRow, path: string): unknown {
+  const found = lookupField(row, path)
+  return found.ok ? found.value : undefined
+}
+
+function formatDurationMs(value: number) {
+  if (!Number.isFinite(value)) return '-'
+  if (value < 1) return `${value.toFixed(2)}ms`
+  if (value < 1000) return `${value.toFixed(value < 10 ? 2 : value < 100 ? 1 : 0)}ms`
+  return `${(value / 1000).toFixed((value / 1000) < 10 ? 2 : 1)}s`
+}
+
+function outcomeClass(value: string) {
+  const v = (value || '').toLowerCase()
+  if (v.includes('error') || v.includes('fail')) return 'error'
+  if (v.includes('timeout')) return 'warn'
+  if (v.includes('cancel')) return 'other'
+  if (v.includes('success') || v.includes('ok')) return 'info'
+  return 'other'
+}
+
+function formatOutcomeSummary(rows: LogRow[]) {
+  const counts = new Map<string, number>()
+  let seen = 0
+  for (const row of rows) {
+    if (!isSiftEventRow(row)) continue
+    const key = String(siftField(row, 'outcome') || 'unknown').toLowerCase()
+    counts.set(key, (counts.get(key) || 0) + 1)
+    seen++
+  }
+  if (seen === 0) return '-'
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([k, n]) => `${k}:${n}`)
+    .join(' ')
 }
 
 function parseNumberLike(value: unknown) {

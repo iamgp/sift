@@ -131,6 +131,35 @@ body {
 .level.warn { color: #fde68a; background: rgba(120,53,15,.16); }
 .level.error { color: #fecdd3; background: rgba(127,29,29,.16); }
 .level.other { color: #ddd6fe; background: rgba(76,29,149,.12); }
+.status {
+  display: inline-flex;
+  min-width: 32px;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 1px 6px;
+  line-height: 1.1;
+  border: 1px solid var(--border);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.status.info { color: #bfdbfe; background: rgba(30,58,138,.14); }
+.status.warn { color: #fde68a; background: rgba(120,53,15,.16); }
+.status.error { color: #fecdd3; background: rgba(127,29,29,.16); }
+.status.other { color: #ddd6fe; background: rgba(76,29,149,.12); }
+.outcome-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 1px 6px;
+  line-height: 1.1;
+  border: 1px solid var(--border);
+  font-size: 10px;
+  text-transform: lowercase;
+}
+.outcome-chip.info { color: #bfdbfe; background: rgba(30,58,138,.14); }
+.outcome-chip.warn { color: #fde68a; background: rgba(120,53,15,.16); }
+.outcome-chip.error { color: #fecdd3; background: rgba(127,29,29,.16); }
+.outcome-chip.other { color: #ddd6fe; background: rgba(76,29,149,.12); }
 .inline-details { border: 0; background: transparent; color: #9ec5ff; cursor: pointer; padding: 0; font: inherit; font-size: 11px; }
 .inline-details:hover { text-decoration: underline; color: #d5e9ff; }
 .drawer {

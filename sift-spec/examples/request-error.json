@@ -1,0 +1,36 @@
+{
+  "schema_version": "sift.event/v1",
+  "timestamp": "2026-02-23T22:11:14.102Z",
+  "level": "error",
+  "service": "checkout-api",
+  "environment": "production",
+  "message": "payment failed",
+  "outcome": "error",
+  "duration_ms": 921.7,
+  "status_code": 402,
+  "request": {
+    "id": "req_01JQ9Q34P2M",
+    "method": "POST",
+    "path": "/api/checkout",
+    "route": "/api/checkout"
+  },
+  "error": {
+    "type": "CardDeclinedError",
+    "message": "Card declined",
+    "why": "Bank rejected the authorization request",
+    "fix": "Ask the user to retry with a different payment method",
+    "link": "https://docs.example.com/payments/card-declined"
+  },
+  "attributes": {
+    "user": { "id": "user_123", "plan": "pro" },
+    "cart": { "items": 3, "total_cents": 9999 },
+    "payment": { "method": "card", "provider": "stripe" }
+  },
+  "sdk": {
+    "name": "sift-sdk-python",
+    "version": "0.1.0",
+    "language": "python",
+    "runtime": "cpython-3.12"
+  }
+}
+

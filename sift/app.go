@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"io/fs"
 	"net"
 	"net/http"
 	"os"
@@ -21,7 +22,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-	"io/fs"
 )
 
 type inferredFields struct {
@@ -75,6 +75,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 	fs.SetOutput(stderr)
 	filePath := fs.String("f", "", "path to JSONL file")
 	tailMode := fs.Bool("tail", false, "watch file for appended lines")
+	httpIngest := fs.Bool("ingest", false, "accept HTTP JSON ingest at /api/ingest")
 	retentionCap := fs.Int("cap", defaultRetainedLiveRows, "max retained events in memory/UI")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -135,7 +136,13 @@ func run(args []string, stdout, stderr io.Writer) error {
 			page.Rows = retainLatestRows(page.Rows, *retentionCap)
 			page.Metrics.DroppedEvents += page.Metrics.Events - len(page.Rows)
 		}
+		if *httpIngest {
+			page.Live = true
+			live := newLivePage(page)
+			handler = newFrontendHandler(page, live)
+		} else {
 			handler = newFrontendHandler(page, nil)
+		}
 	}
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -151,6 +158,9 @@ func run(args []string, stdout, stderr io.Writer) error {
 
 	if page.Live {
 		_, _ = fmt.Fprintf(stdout, "Streaming JSONL from %s at http://%s\n", page.Path, ln.Addr().String())
+		if *httpIngest {
+			_, _ = fmt.Fprintln(stdout, "HTTP ingest enabled: POST JSON object/array to /api/ingest")
+		}
 	} else {
 		_, _ = fmt.Fprintf(stdout, "Serving %d rows from %s at http://%s\n", len(page.Rows), page.Path, ln.Addr().String())
 	}
@@ -245,6 +255,37 @@ func collectRawRecords(parsed []parsedRecord) []map[string]any {
 	out := make([]map[string]any, 0, len(parsed))
 	for _, p := range parsed {
 		out = append(out, p.rec)
+	}
+	return out
+}
+
+func parseIngestJSON(body []byte) ([]map[string]any, error) {
+	trimmed := bytes.TrimSpace(body)
+	if len(trimmed) == 0 {
+		return nil, errors.New("empty body")
+	}
+	var v any
+	if err := json.Unmarshal(trimmed, &v); err != nil {
+		return nil, fmt.Errorf("invalid json: %w", err)
+	}
+	switch vv := v.(type) {
+	case map[string]any:
+		return []map[string]any{vv}, nil
+	case []any:
+		return toObjectRecords(vv), nil
+	default:
+		return []map[string]any{{"value": vv}}, nil
+	}
+}
+
+func toObjectRecords(items []any) []map[string]any {
+	out := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		if rec, ok := item.(map[string]any); ok {
+			out = append(out, rec)
+		} else {
+			out = append(out, map[string]any{"value": item})
+		}
 	}
 	return out
 }
@@ -491,19 +532,43 @@ func newLiveHandler(live *livePage) http.Handler {
 }
 
 type bootstrapPayload struct {
-	Path         string         `json:"path"`
-	Fields       inferredFields `json:"fields"`
-	Rows         []logRow       `json:"rows"`
+	Path         string          `json:"path"`
+	Fields       inferredFields  `json:"fields"`
+	Rows         []logRow        `json:"rows"`
 	Malformed    []malformedLine `json:"malformed"`
-	Metrics      ingestMetrics  `json:"metrics"`
-	Live         bool           `json:"live"`
-	RetentionCap int            `json:"retentionCap"`
+	Metrics      ingestMetrics   `json:"metrics"`
+	Live         bool            `json:"live"`
+	RetentionCap int             `json:"retentionCap"`
 }
 
 func newFrontendHandler(data pageData, live *livePage) http.Handler {
 	mux := http.NewServeMux()
 
 	if live != nil {
+		mux.HandleFunc("/api/ingest", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			body, err := io.ReadAll(io.LimitReader(r.Body, 8<<20))
+			if err != nil {
+				http.Error(w, "read body", http.StatusBadRequest)
+				return
+			}
+			records, err := parseIngestJSON(body)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			for _, rec := range records {
+				live.append(0, rec)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"ok":       true,
+				"ingested": len(records),
+			})
+		})
 		mux.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
 			flusher, ok := w.(http.Flusher)
 			if !ok {
@@ -631,6 +696,9 @@ func (l *livePage) snapshot() pageData {
 
 func (l *livePage) append(line int, rec map[string]any) {
 	l.mu.Lock()
+	if line <= 0 {
+		line = l.totalRows + 1
+	}
 	if l.page.Fields.Timestamp == "" || l.page.Fields.Level == "" || l.page.Fields.Message == "" {
 		next := inferFields([]map[string]any{rec})
 		if l.page.Fields.Timestamp == "" {

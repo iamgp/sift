@@ -1,0 +1,29 @@
+{
+  "schema_version": "sift.event/v1",
+  "timestamp": "2026-02-23T22:10:12.551Z",
+  "level": "info",
+  "service": "checkout-api",
+  "environment": "production",
+  "message": "request completed",
+  "outcome": "success",
+  "duration_ms": 183.2,
+  "status_code": 200,
+  "request": {
+    "id": "req_01JQ9Q31A8X",
+    "method": "POST",
+    "path": "/api/checkout",
+    "route": "/api/checkout"
+  },
+  "attributes": {
+    "user": { "id": "user_123", "plan": "pro" },
+    "cart": { "items": 3, "total_cents": 9999 },
+    "payment": { "method": "card", "provider": "stripe" }
+  },
+  "sdk": {
+    "name": "sift-sdk-python",
+    "version": "0.1.0",
+    "language": "python",
+    "runtime": "cpython-3.12"
+  }
+}
+

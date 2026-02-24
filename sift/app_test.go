@@ -210,7 +210,7 @@ func TestNewHandlerRendersReadableRows(t *testing.T) {
 		`renderFilterChips();`,
 		`event.key === "/"`,
 		`event.key === "Escape"`,
-			`Details &gt;`,
+		`Details &gt;`,
 		`id="detail-drawer"`,
 		`id="drawer-copy-fields"`,
 		`Copy selected fields`,
@@ -222,7 +222,7 @@ func TestNewHandlerRendersReadableRows(t *testing.T) {
 		`function appendMalformedLine(item)`,
 		`hydrateInitialRowsFromDOM();`,
 		`function renderVirtualRows()`,
-			`MAX_CLIENT_ROWS = 500000`,
+		`MAX_CLIENT_ROWS = 500000`,
 		`MAX_CLIENT_MALFORMED_ROWS = 5000`,
 		`MAX_PENDING_EVENTS = 5000`,
 		`rowsViewport.addEventListener("scroll", queueVirtualRender`,
@@ -594,4 +594,70 @@ func TestTailFilePublishesAppendedRows(t *testing.T) {
 	cancel()
 	<-done
 	t.Fatalf("timed out waiting for appended row")
+}
+
+func TestParseIngestJSONSupportsObjectAndArray(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		body string
+		want int
+	}{
+		{name: "object", body: `{"msg":"ok"}`, want: 1},
+		{name: "array", body: `[{"msg":"a"},{"msg":"b"}]`, want: 2},
+		{name: "scalar", body: `123`, want: 1},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := parseIngestJSON([]byte(tt.body))
+			if err != nil {
+				t.Fatalf("parseIngestJSON returned error: %v", err)
+			}
+			if len(got) != tt.want {
+				t.Fatalf("expected %d records, got %d", tt.want, len(got))
+			}
+		})
+	}
+}
+
+func TestFrontendHandlerIngestAppendsRows(t *testing.T) {
+	t.Parallel()
+
+	base := pageData{Path: "ingest", RetentionCap: 100}
+	live := newLivePage(base)
+	h := newFrontendHandler(base, live)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/ingest", strings.NewReader(`[{"message":"hello","service":"api"},{"message":"bye","service":"worker"}]`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (%s)", rr.Code, rr.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if got := int(resp["ingested"].(float64)); got != 2 {
+		t.Fatalf("expected ingested=2, got %d", got)
+	}
+
+	page := live.snapshot()
+	if len(page.Rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(page.Rows))
+	}
+	if page.Rows[0].Line != 1 || page.Rows[1].Line != 2 {
+		t.Fatalf("expected auto line numbering 1,2 got %d,%d", page.Rows[0].Line, page.Rows[1].Line)
+	}
+	if page.Rows[0].Message != "hello" || page.Rows[1].Message != "bye" {
+		t.Fatalf("unexpected messages: %+v", page.Rows)
+	}
+	if page.Metrics.Events != 2 {
+		t.Fatalf("expected metrics.events=2, got %+v", page.Metrics)
+	}
 }
